@@ -4,7 +4,7 @@ import socket
 import time
 
 from app import create_app
-from services.job_service import claim_next_job, process_job
+from services.job_service import claim_next_job, heartbeat, process_job, recover_stale_jobs
 
 
 app = create_app()
@@ -14,9 +14,13 @@ def run(once=False):
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     with app.app_context():
         while True:
+            heartbeat(worker_id)
+            recover_stale_jobs()
             job = claim_next_job(worker_id)
             if job:
+                heartbeat(worker_id, job.id)
                 process_job(job)
+                heartbeat(worker_id)
             elif once:
                 return
             else:

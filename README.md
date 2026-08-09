@@ -1,186 +1,110 @@
-# StudioPilot — YouTube Automator
+# StudioPilot
 
-StudioPilot is a full-stack dashboard for preparing and publishing YouTube videos. It stores every video as a durable draft, supports optional AI metadata and transcription, creates thumbnail candidates, manages playlists, and sends immediate or scheduled uploads through a database-backed worker. A video is marked `uploaded` only after the official YouTube Data API returns a video ID.
+StudioPilot is a single-operator YouTube preparation and publishing workspace. It keeps videos as durable drafts, supports optional AI metadata and transcription, creates thumbnail candidates, queues immediate or scheduled uploads, resumes interrupted uploads, and waits for YouTube processing confirmation before reporting success.
 
-## Architecture
+## What runs
 
-- `frontend/`: React 18, TypeScript, Vite dashboard and typed API client.
-- `backend/`: Flask API, SQLAlchemy models, Flask-Migrate migrations, Google OAuth, OpenAI services, and durable worker.
-- SQLite is the local default. Set a PostgreSQL `DATABASE_URL` in production.
-- Uploaded video and generated thumbnail files use local disk by default. Production deployments with more than one host must mount shared durable storage or replace this storage adapter.
-- The worker claims due jobs from the database. SQLite is appropriate for one worker; PostgreSQL is required for reliable multi-worker row locking.
+- `frontend/`: React 18 and TypeScript operator interface.
+- `backend/`: Flask API, SQLAlchemy database, Google OAuth, and media services.
+- `backend/worker.py`: one durable SQLite upload worker with leases, retries, heartbeats, resumable sessions, post-processing, and provider verification.
+- `scripts/windows/`: guarded Windows 11 setup, start, stop, and diagnostics.
+- `GET /.well-known/hai-connector.json`: HAI connector discovery contract.
 
-## Local setup
+The production frontend is built once and served by Flask. Browser calls use same-origin `/api`, so a single local or ngrok URL serves the complete application.
 
-Prerequisites: Python 3.11–3.13 with `venv`, Node.js 20+, npm, and optionally FFmpeg for preparing audio outside the app.
+## Windows 11
 
-```bash
-git clone https://github.com/Noodzakelijk-Online/026-YT-automator-fixed.git
-cd 026-YT-automator-fixed
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-cp backend/.env.example backend/.env
-cd backend
-flask --app app db upgrade
-flask --app app run --debug
+Prerequisites: Python 3.11-3.13, Node.js 20.19+/22/24 LTS, and npm. FFmpeg is required only for long-video transcription. ngrok is required only for public access.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup.ps1
+.\studiopilot.cmd
 ```
 
-In a second terminal:
+Open `http://127.0.0.1:5000`. Local loopback requests can use the configured bypass; access over ngrok always requires the operator password chosen during setup.
 
-```bash
-cd frontend
-cp .env.example .env
+```powershell
+.\studiopilot.cmd doctor
+.\studiopilot.cmd stop
+```
+
+See [Windows and ngrok operations](docs/WINDOWS_NGROK.md).
+
+## YouTube connection
+
+1. Create a Google Cloud project and enable YouTube Data API v3.
+2. Configure an OAuth consent screen and an OAuth Web application client.
+3. Put the downloaded client JSON outside this repository and set its absolute path as `GOOGLE_CLIENT_SECRETS_FILE` in `backend/.env`.
+4. Keep the generated `TOKEN_ENCRYPTION_KEY`; it encrypts OAuth credentials and resumable-upload session URLs at rest.
+5. For local use, authorize `http://127.0.0.1:5000/api/auth/callback` in Google Cloud.
+6. For ngrok, authorize the stable HTTPS ngrok URL plus `/api/auth/callback`, then start with that domain.
+
+StudioPilot requests YouTube upload, read, and force-SSL scopes. Google may require consent-screen verification for external users. YouTube quota and provider authorization are external acceptance gates; the application reports them as failures rather than simulating success.
+
+## Runtime behavior
+
+- Video uploads stream to disk in 1 MB chunks while hashing; duplicate content is rejected.
+- UI polling pauses in hidden tabs and adapts from 30 seconds idle to 3 seconds during provider work.
+- One dashboard request returns drafts, jobs, account state, readiness, and worker status.
+- SQLite uses WAL, foreign keys, and a busy timeout. Run one worker with SQLite. Use PostgreSQL and shared media storage before running multiple workers or hosts.
+- Upload session URLs are encrypted. A stale lease recovers into upload retry or provider verification depending on whether YouTube already returned an ID.
+- Thumbnail and playlist failures remain visible post-upload warnings and never erase a real provider video ID.
+- A job becomes `uploaded` only after YouTube reports processing success.
+
+## HAI connector
+
+HAI can read bounded draft/job status and queue an already-approved upload. It cannot bypass operator review: mutations require a bearer token, idempotency key, HAI task ID, approval source, and approval-binding digest. StudioPilot remains authoritative for execution and YouTube verification.
+
+See [HAI connector](docs/HAI_CONNECTOR.md).
+
+## Development
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install -r backend\requirements-dev.txt
+cd backend
+..\.venv\Scripts\python -m flask --app app db upgrade
+..\.venv\Scripts\python -m pytest -q
+
+cd ..\frontend
 npm ci
-npm run dev
+npm run typecheck
+npm run lint
+npm run build
 ```
 
-Vite runs at `http://localhost:8080`; Flask runs at `http://localhost:5000`.
+For separate development servers, run Flask on port 5000 and Vite on port 8080. Production and Windows launch scripts use the built same-origin interface.
 
-## Worker and scheduling
+## Configuration
 
-The API only queues work. Run the worker separately:
-
-```bash
-cd backend
-../.venv/bin/python worker.py
-```
-
-For a one-shot scheduler invocation use `WORKER_ONCE=1 python worker.py`. Immediate jobs use the current UTC time; scheduled jobs persist their UTC `run_at` and become eligible when due. Cancelling is only safe before a worker claims the job. Recoverable YouTube 429/5xx failures use exponential backoff and the configured retry limit.
-
-YouTube's native scheduled-publication behavior is not used: StudioPilot waits locally and then starts the API upload. Large videos therefore begin uploading at the requested time and publish when the upload completes. Keep the worker online and use `private` if editorial review on YouTube is required.
-
-## Environment variables
-
-See [`.env.example`](.env.example) and [`backend/.env.example`](backend/.env.example).
+Copy [`.env.example`](.env.example) to `backend/.env`, or let the Windows setup script create it. Important controls:
 
 | Variable | Purpose |
 | --- | --- |
-| `SECRET_KEY` | Long random Flask session secret |
-| `DATABASE_URL` | SQLAlchemy URL; SQLite locally, PostgreSQL in production |
-| `GOOGLE_CLIENT_SECRETS_FILE` | Absolute path to an uncommitted OAuth web-client JSON |
-| `TOKEN_ENCRYPTION_KEY` | Fernet key used to encrypt OAuth credentials at rest |
-| `OPENAI_API_KEY` | Optional metadata and Whisper credential |
-| `OPENAI_MODEL` | Metadata model, default `gpt-4o-mini` |
-| `UPLOAD_FOLDER` / `GENERATED_FOLDER` | Durable media locations |
-| `MAX_CONTENT_LENGTH` | Maximum incoming video bytes |
-| `FRONTEND_URL` | OAuth success destination |
-| `CORS_ORIGINS` | Comma-separated exact browser origins |
-| `JOB_MAX_RETRIES` | Recoverable upload retry ceiling |
-| `VITE_API_URL` | Required browser-visible API base URL, including `/api` |
+| `SECRET_KEY` | Session integrity; 32+ random characters in public/production mode |
+| `TOKEN_ENCRYPTION_KEY` | Stable Fernet key for OAuth and resumable sessions |
+| `OPERATOR_PASSWORD_HASH` | Werkzeug password hash required for public/production mode |
+| `PUBLIC_BASE_URL` | Exact stable HTTPS external origin |
+| `LOCAL_AUTH_BYPASS` | Loopback-only convenience; must be `false` publicly |
+| `DATABASE_URL` | SQLite locally; PostgreSQL for concurrent workers |
+| `GOOGLE_CLIENT_SECRETS_FILE` | Absolute uncommitted OAuth client JSON path |
+| `OPENAI_API_KEY` | Optional metadata and transcription provider key |
+| `FFMPEG_PATH` | FFmpeg executable used to chunk long audio locally |
+| `HAI_CONNECTOR_ENABLED` / `HAI_CONNECTOR_TOKEN` | Optional isolated HAI access |
 
-Generate a token-encryption key:
+Public and production startup fails closed when authentication, HTTPS, or secrets are unsafe.
 
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
+## Containers
 
-Changing that key makes stored Google credentials unreadable; keep it in a production secret manager and back it up securely.
-
-## Google OAuth and YouTube Data API
-
-1. Create a Google Cloud project and enable **YouTube Data API v3**.
-2. Configure the OAuth consent screen. Add test users while the app is in testing mode.
-3. Create an OAuth 2.0 **Web application** client.
-4. Add `http://localhost:5000/api/auth/callback` as a local authorized redirect URI. Production must use the exact HTTPS API origin plus `/api/auth/callback`.
-5. Download the client JSON outside the repository and set `GOOGLE_CLIENT_SECRETS_FILE`.
-6. Set `TOKEN_ENCRYPTION_KEY`, start the API, then use Settings → Connect with Google.
-
-Scopes requested:
-
-- `youtube.upload` — upload videos.
-- `youtube.readonly` — read channel, playlists, and categories.
-- `youtube.force-ssl` — create playlists, set thumbnails, and add playlist items.
-
-Google may require app verification before external production users can grant these sensitive scopes. YouTube quota is finite; uploads have a substantial quota cost. The UI shows quota and authorization failures as real job failures.
-
-## AI metadata and transcription
-
-AI is optional. Without `OPENAI_API_KEY`, metadata generation returns a deterministic editable fallback and clearly marks its source as `fallback`. With a key, the provider returns title alternatives, description, summary, tags, hashtags, SEO keywords, category and playlist suggestions, chapters, a pinned comment, and social copy. YouTube field limits are checked again when a draft is saved.
-
-Transcription uses OpenAI Whisper when configured. The hosted transcription request has a 25 MB file limit; large videos should have audio extracted and compressed before integrating a production chunking adapter. A failed or unavailable transcript never blocks manual metadata editing or upload. Users can paste and edit transcripts directly.
-
-## Thumbnails and playlists
-
-Generated thumbnails use Pillow templates; custom JPG/PNG upload and selection are supported by the API. The selected thumbnail is uploaded after the video. A YouTube thumbnail permission/error is logged as a warning and does not falsify or roll back a successful video upload.
-
-Playlists and assignable categories come from the connected channel through the official API. Playlist assignment runs after upload. Its failure is recorded separately because the YouTube video already exists at that point.
-
-## Batch workflow
-
-Upload each file to create an independently editable draft. Review metadata, transcript and thumbnail for every item. The `POST /api/batch-jobs` contract accepts `draft_ids`, creates one job per video, and tracks each outcome separately. Failed jobs can be retried individually; exact file checksums and active-job checks prevent accidental duplicates.
-
-## Tests and quality gates
+`Dockerfile.backend` builds the frontend and backend into one non-root image. Compose binds the app to loopback by default and runs one separate worker:
 
 ```bash
-cd backend
-../.venv/bin/pytest -q
-flask --app app db upgrade
-
-cd ../frontend
-npm ci
-npm run build       # includes TypeScript project build
-npm run lint
+# On Windows, run scripts/windows/setup.ps1 first so backend/.env contains real secrets.
+docker compose up --build
 ```
 
-GitHub Actions executes these gates on pushes and pull requests. Tests cover health/readiness, auth truthfulness, validation/error contracts, drafts, no-key metadata fallback, job states, and mocked playlist/YouTube services.
+If you create `backend/.env` manually on another platform, replace every secret placeholder with a real random value and generate a Werkzeug operator password hash before starting Compose. Do not expose the Compose port directly. Use HTTPS and set `PUBLIC_BASE_URL`, `OPERATOR_PASSWORD_HASH`, and `LOCAL_AUTH_BYPASS=false` first.
 
-## Production deployment
+## Verification
 
-Use HTTPS for both sites, a strong `SECRET_KEY`, a stable `TOKEN_ENCRYPTION_KEY`, PostgreSQL, shared durable media storage, exact CORS origins, and a secret manager. Run API and worker as separate long-lived processes:
-
-```bash
-gunicorn --chdir backend --workers 2 --bind 0.0.0.0:5000 app:app
-python backend/worker.py
-```
-
-Run `flask --app backend/app.py db upgrade` once during release. Build the frontend with `npm --prefix frontend ci && npm --prefix frontend run build`, then serve `frontend/dist` through a CDN/static host. The included Compose file is a single-host starting point, not a high-availability design.
-
-### Backend deployment
-
-Deploy the Flask API and worker to a long-running Python host such as Railway, Render, or Fly.io. Configure the backend variables from `backend/.env.example`; production requires at least a strong `SECRET_KEY`, stable `TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`, `FRONTEND_URL`, and `CORS_ORIGINS`. Set `FLASK_ENV=production`. `CORS_ORIGINS` is a comma-separated list of exact frontend origins (for example `https://studio-pilot.vercel.app`); wildcards are rejected in production. After deployment, verify `https://YOUR_API_HOST/api/health` returns `{"status":"healthy",...}`.
-
-### Vercel frontend
-
-Configure the Vercel project with **Root Directory** `frontend`, **Build Command** `npm run build`, and **Output Directory** `dist`. In Project Settings → Environment Variables, add:
-
-```text
-VITE_API_URL=https://YOUR_API_HOST/api
-```
-
-Apply it to Preview and Production (or use separate backend URLs for each), then redeploy: Vite embeds this value at build time. Do not set it to `localhost`, and do not use the old Create React App name `REACT_APP_API_URL`. Add each resulting Vercel origin to the backend's `CORS_ORIGINS` and redeploy the backend. For credentialed cross-origin requests, frontend and backend must both use HTTPS.
-
-## API overview
-
-- Health/config: `GET /api/health`, `/api/readiness`, `/api/settings`
-- OAuth: `GET /api/auth/status`, `/login`, `/callback`, `/channel`; `POST /refresh`, `/logout`
-- Drafts: `POST/GET /api/drafts`, `GET/PATCH /api/drafts/:id`
-- Preparation: metadata, transcript, and thumbnail subroutes under `/api/drafts/:id`
-- YouTube data: `/api/playlists`, `/api/playlists/categories`
-- Jobs: create under a draft, list/get, retry/cancel, and `POST /api/batch-jobs`
-- History: `GET /api/history`
-
-Errors consistently return `{ "error": { "code", "message", "details", "request_id" } }`.
-
-## Security notes and limitations
-
-- OAuth client files, encrypted tokens, databases, uploads, generated media, logs, and local environment files are ignored by Git.
-- This is a single-operator/local-user application today; production multi-tenant use requires an external identity provider and per-request ownership checks.
-- OAuth tokens are encrypted in the database, but uploaded media is not encrypted at rest by the application. Use encrypted disks/object storage.
-- Thumbnail generation currently uses graphic templates rather than decoded video-frame extraction.
-- Hosted Whisper's request-size limit means long-form transcription needs a chunking/audio pipeline.
-- Upload progress is worker-to-database polling, not push/WebSocket delivery.
-- Resumable uploads survive transient HTTP retries inside a worker process, but a worker process restart starts a new YouTube upload session.
-
-## Troubleshooting
-
-- **OAuth not configured:** verify the JSON path, redirect URI, Fernet key, and consent-screen test user.
-- **CORS blocked:** set the exact frontend origin, including port, in `CORS_ORIGINS`.
-- **Job stays queued:** run `worker.py` with the same database and media volumes as the API.
-- **Quota exceeded:** wait for quota reset or request quota; retry only after quota is available.
-- **Token cannot be decrypted:** restore the original `TOKEN_ENCRYPTION_KEY`, then reconnect if necessary.
-- **SQLite locked:** stop extra workers or move to PostgreSQL.
-
-## Roadmap
-
-Multi-user authorization, object-storage adapters, chunked transcription, extracted video-frame thumbnails, worker heartbeats/stale-lock recovery, and WebSocket job events are the next production scaling steps.
+GitHub Actions run backend tests, a fresh migration, frontend lint, and production build. Local release checks are documented in [production readiness](docs/PRODUCTION_READINESS.md).

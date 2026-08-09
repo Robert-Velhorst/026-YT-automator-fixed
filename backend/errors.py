@@ -16,8 +16,9 @@ def register_error_handlers(app):
         try:
             from extensions import db
             from models import ErrorLog
+            db.session.rollback()
             db.session.add(ErrorLog(request_id=getattr(request, "request_id", None), code=error.code,
-                                    message=error.message)); db.session.commit()
+                                    message=error.message, details_json=None)); db.session.commit()
         except Exception:
             app.logger.exception("Could not persist API error")
         return jsonify({"error": {"code": error.code, "message": error.message, "details": error.details,
@@ -34,6 +35,7 @@ def register_error_handlers(app):
         try:
             from extensions import db
             from models import ErrorLog
+            db.session.rollback()
             db.session.add(ErrorLog(request_id=getattr(request, "request_id", None), code="internal_error",
                                     message=type(error).__name__)); db.session.commit()
         except Exception:

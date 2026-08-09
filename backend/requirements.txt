@@ -1,5 +1,6 @@
-Flask==3.1.1
+Flask==3.1.3
 Flask-CORS==6.0.1
+Flask-Compress==1.18
 Flask-Migrate==4.1.0
 Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.41
@@ -10,9 +11,8 @@ google-api-python-client==2.172.0
 openai==1.86.0
 python-dateutil==2.9.0.post0
 Pillow>=12.0.0,<13
-python-dotenv==1.1.0
-cryptography==45.0.4
+python-dotenv==1.2.2
+cryptography==50.0.0
 gunicorn==23.0.0
+waitress==3.0.2
 psycopg[binary]==3.2.13
-pytest==8.4.0
-pytest-mock==3.14.1

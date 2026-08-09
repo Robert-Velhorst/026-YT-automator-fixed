@@ -1,0 +1,14 @@
+.git
+.github
+.runtime
+.playwright-cli
+.venv
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+backend/.env
+backend/*.db*
+backend/uploads
+backend/generated
+frontend/dist
+output
