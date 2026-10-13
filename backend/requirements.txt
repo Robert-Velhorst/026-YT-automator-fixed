@@ -7,7 +7,7 @@ alembic==1.16.2
 google-auth==2.40.3
 google-auth-oauthlib==1.2.2
 google-api-python-client==2.172.0
-openai==1.86.0
+openai==3.28.0
 python-dateutil==2.9.0.post0
 Pillow>=12.0.0,<13
 python-dotenv==1.1.0
