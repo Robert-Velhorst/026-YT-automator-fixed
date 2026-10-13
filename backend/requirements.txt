@@ -10,7 +10,7 @@ google-api-python-client==2.172.0
 openai==1.86.0
 python-dateutil==2.9.0.post0
 Pillow>=12.0.0,<13
-python-dotenv==1.1.0
+python-dotenv==1.2.4
 cryptography==45.0.4
 gunicorn==23.0.0
 psycopg[binary]==3.2.13
