@@ -127,28 +127,28 @@ GitHub Actions executes these gates on pushes and pull requests. Tests cover hea
 
 ## Production deployment
 
-Use HTTPS for both sites, a strong `SECRET_KEY`, a stable `TOKEN_ENCRYPTION_KEY`, PostgreSQL, shared durable media storage, exact CORS origins, and a secret manager. Run API and worker as separate long-lived processes:
+Use HTTPS for the frontend and API, a strong `SECRET_KEY`, a stable `TOKEN_ENCRYPTION_KEY`, a durable production database, shared durable media storage, exact CORS origins, and a secret manager. Run API and worker as separate long-lived processes:
 
 ```bash
 gunicorn --chdir backend --workers 2 --bind 0.0.0.0:5000 app:app
 python backend/worker.py
 ```
 
-Run `flask --app backend/app.py db upgrade` once during release. Build the frontend with `npm --prefix frontend ci && npm --prefix frontend run build`, then serve `frontend/dist` through a CDN/static host. The included Compose file is a single-host starting point, not a high-availability design.
+The production target is a Hetzner host. The included Compose file starts the API and worker with persistent Docker volumes; it does not include a frontend server or reverse proxy and is not a high-availability design. The current database default is SQLite, so choose and verify the production database and migration path before cutover. Build the frontend with `npm --prefix frontend ci && npm --prefix frontend run build` and serve `frontend/dist` over HTTPS with SPA fallback. Keep the API behind the HTTPS reverse proxy and restrict direct public access to port 5000.
 
-### Backend deployment
+### Hetzner deployment preparation
 
-Deploy the Flask API and worker to a long-running Python host such as Railway, Render, or Fly.io. Configure the backend variables from `backend/.env.example`; production requires at least a strong `SECRET_KEY`, stable `TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`, `FRONTEND_URL`, and `CORS_ORIGINS`. Set `FLASK_ENV=production`. `CORS_ORIGINS` is a comma-separated list of exact frontend origins (for example `https://studio-pilot.vercel.app`); wildcards are rejected in production. After deployment, verify `https://YOUR_API_HOST/api/health` returns `{"status":"healthy",...}`.
+Before production cutover, provision the Hetzner host, configure SSH and firewall access, point DNS, and install the maintained container runtime and HTTPS reverse proxy. Configure the backend variables from `backend/.env.example`; production requires at least a strong `SECRET_KEY`, stable `TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`, `FRONTEND_URL`, and `CORS_ORIGINS`. Set `FLASK_ENV=production`. `CORS_ORIGINS` must contain exact HTTPS frontend origins; wildcards are rejected in production. Configure the Google OAuth callback for the production API URL and keep credentials in a secret manager or protected host-side environment file.
 
-### Vercel frontend
+Back up the database, uploads, generated media, and OAuth configuration before migration. Verify restore on the target host, apply schema migrations, and confirm that the API health/readiness endpoints and worker operate against the same database and persistent storage. The current Compose definition binds port 5000 on all interfaces; restrict it to localhost or enforce an equivalent firewall rule before exposing the host.
 
-Configure the Vercel project with **Root Directory** `frontend`, **Build Command** `npm run build`, and **Output Directory** `dist`. In Project Settings → Environment Variables, add:
+Build the frontend with the production API URL set at build time:
 
 ```text
-VITE_API_URL=https://YOUR_API_HOST/api
+VITE_API_URL=https://YOUR_DOMAIN/api
 ```
 
-Apply it to Preview and Production (or use separate backend URLs for each), then redeploy: Vite embeds this value at build time. Do not set it to `localhost`, and do not use the old Create React App name `REACT_APP_API_URL`. Add each resulting Vercel origin to the backend's `CORS_ORIGINS` and redeploy the backend. For credentialed cross-origin requests, frontend and backend must both use HTTPS.
+Vite embeds this value at build time. Do not set it to `localhost` in a production build, and do not use the old Create React App name `REACT_APP_API_URL`. Add the production frontend origin to the backend's `CORS_ORIGINS`. For credentialed cross-origin requests, frontend and backend must both use HTTPS. A cutover is complete only after health, OAuth, upload, worker, database restore, backups, and rollback have been verified; no production cutover is claimed by this guide.
 
 ## API overview
 
