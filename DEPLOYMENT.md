@@ -46,46 +46,13 @@ cp .env.example .env
 npm run dev
 ```
 
-### 3. Production Deployment
+### 3. Production deployment target: Hetzner
 
-#### Backend (Flask API)
+Hetzner is the production target. This repository has not yet completed a Hetzner cutover; review `DEPLOYMENT_TARGET.md` and complete the per-app topology before exposing a production service.
 
-**Option 1: Heroku**
-```bash
-# Install Heroku CLI
-# Create Procfile
-echo "web: gunicorn app:app" > Procfile
+The application uses a Flask API and worker, a React frontend, a database, and OAuth callbacks. Before cutover, confirm persistent database and upload storage, configure the exact HTTPS frontend/API origins and Google OAuth redirect URIs, provision secrets outside Git, and document backups, TLS, health monitoring, and rollback. The included Compose configuration is a single-host starting point, not production acceptance.
 
-# Deploy
-heroku create your-app-name
-heroku config:set OPENAI_API_KEY=your_key_here
-git push heroku main
-```
-
-**Option 2: Railway**
-```bash
-# Install Railway CLI
-railway login
-railway init
-railway up
-```
-
-#### Frontend (React App)
-
-**Option 1: Vercel**
-```bash
-# Install Vercel CLI
-npm i -g vercel
-vercel --prod
-```
-
-**Option 2: Netlify**
-```bash
-# Build the app
-npm run build
-
-# Deploy dist folder to Netlify
-```
+Build the frontend with `npm run build` and serve the generated `dist` output from the reviewed Hetzner service. Set `VITE_API_URL` at build time to the public HTTPS API URL and configure `CORS_ORIGINS` with the exact production frontend origin.
 
 ## Configuration
 

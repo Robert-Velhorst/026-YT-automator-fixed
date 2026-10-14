@@ -136,19 +136,11 @@ python backend/worker.py
 
 Run `flask --app backend/app.py db upgrade` once during release. Build the frontend with `npm --prefix frontend ci && npm --prefix frontend run build`, then serve `frontend/dist` through a CDN/static host. The included Compose file is a single-host starting point, not a high-availability design.
 
-### Backend deployment
+### Hetzner production target
 
-Deploy the Flask API and worker to a long-running Python host such as Railway, Render, or Fly.io. Configure the backend variables from `backend/.env.example`; production requires at least a strong `SECRET_KEY`, stable `TOKEN_ENCRYPTION_KEY`, `DATABASE_URL`, `FRONTEND_URL`, and `CORS_ORIGINS`. Set `FLASK_ENV=production`. `CORS_ORIGINS` is a comma-separated list of exact frontend origins (for example `https://studio-pilot.vercel.app`); wildcards are rejected in production. After deployment, verify `https://YOUR_API_HOST/api/health` returns `{"status":"healthy",...}`.
+Hetzner is the production target. The included Compose file is a single-host starting point, not a completed or accepted Hetzner deployment. Follow `DEPLOYMENT_TARGET.md` and the deployment guide before any production cutover. Inventory and preserve the database and uploaded files, provision secrets outside Git, configure Google OAuth callbacks and exact HTTPS origins, and document backups, health monitoring, and rollback.
 
-### Vercel frontend
-
-Configure the Vercel project with **Root Directory** `frontend`, **Build Command** `npm run build`, and **Output Directory** `dist`. In Project Settings → Environment Variables, add:
-
-```text
-VITE_API_URL=https://YOUR_API_HOST/api
-```
-
-Apply it to Preview and Production (or use separate backend URLs for each), then redeploy: Vite embeds this value at build time. Do not set it to `localhost`, and do not use the old Create React App name `REACT_APP_API_URL`. Add each resulting Vercel origin to the backend's `CORS_ORIGINS` and redeploy the backend. For credentialed cross-origin requests, frontend and backend must both use HTTPS.
+Set `VITE_API_URL=https://YOUR_API_HOST/api` in the frontend build environment; Vite embeds it at build time. Do not use `localhost` in a production build or the old Create React App name `REACT_APP_API_URL`. Set backend `CORS_ORIGINS` to the exact public frontend origin, and verify `https://YOUR_API_HOST/api/health` after staging.
 
 ## API overview
 
