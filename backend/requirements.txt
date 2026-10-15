@@ -11,7 +11,7 @@ openai==1.86.0
 python-dateutil==2.9.0.post0
 Pillow>=12.3.0,<13
 python-dotenv==1.2.4
-cryptography==45.0.4
+cryptography==50.0.2
 gunicorn==23.0.0
 psycopg[binary]==3.3.6
 pytest==9.1.1
