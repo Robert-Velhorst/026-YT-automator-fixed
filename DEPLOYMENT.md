@@ -46,65 +46,29 @@ cp .env.example .env
 npm run dev
 ```
 
-### 3. Production Deployment
+### 3. Hetzner production target
 
-#### Backend (Flask API)
+Hetzner is the production target. This guide is a migration plan and does not claim that production has been deployed or cut over.
 
-**Option 1: Heroku**
-```bash
-# Install Heroku CLI
-# Create Procfile
-echo "web: gunicorn app:app" > Procfile
+The current `docker-compose.yml` starts the Flask API and worker with persistent Docker volumes. The frontend is a separate Vite build, and Compose does not include a frontend server or HTTPS reverse proxy. The sample database defaults to SQLite; choose and validate the production database and migration plan before cutover.
 
-# Deploy
-heroku create your-app-name
-heroku config:set OPENAI_API_KEY=your_key_here
-git push heroku main
-```
+Before production cutover:
 
-**Option 2: Railway**
-```bash
-# Install Railway CLI
-railway login
-railway init
-railway up
-```
+1. Provision a Hetzner Linux host, secure SSH access, and restrict inbound traffic to SSH and HTTPS.
+2. Configure DNS and an HTTPS reverse proxy. Keep the API port private behind the proxy; the current Compose file publishes port 5000 on all interfaces.
+3. Store Google OAuth credentials, `SECRET_KEY`, `TOKEN_ENCRYPTION_KEY`, and other production secrets outside Git. Configure `DATABASE_URL`, `FRONTEND_URL`, and exact HTTPS `CORS_ORIGINS` from `backend/.env.example`.
+4. Build the frontend with `VITE_API_URL=https://YOUR_DOMAIN/api`; serve the build output with SPA fallback.
+5. Back up the database, uploads, generated media, and OAuth configuration. Restore them on the target and verify persistence and ownership.
+6. Apply schema migrations, then verify API, worker, OAuth, upload, and database behavior against the target data.
+7. Verify TLS, firewall rules, monitoring, scheduled backups, restore, and the documented rollback path before switching production traffic.
 
-#### Frontend (React App)
-
-**Option 1: Vercel**
-```bash
-# Install Vercel CLI
-npm i -g vercel
-vercel --prod
-```
-
-**Option 2: Netlify**
-```bash
-# Build the app
-npm run build
-
-# Deploy dist folder to Netlify
-```
+Record the host, DNS change, backup identifier, deployment revision, verification evidence, and rollback decision in the release record. Do not claim a completed migration until these checks pass.
 
 ## Configuration
 
 ### Environment Variables
 
-#### Backend (.env)
-```
-GOOGLE_CLIENT_SECRETS_FILE=credentials.json
-TOKEN_FILE=token.json
-OPENAI_API_KEY=sk-your-openai-key
-SECRET_KEY=your-secret-key-here
-FLASK_ENV=production
-PORT=5000
-```
-
-#### Frontend (.env)
-```
-VITE_API_URL=https://your-backend-url.com/api
-```
+Use `backend/.env.example` and `frontend/.env.example` as the current variable references. Keep real secrets and OAuth credential files outside Git. A production frontend build must use the HTTPS API URL; never use a localhost address in the production build.
 
 ### Google API Setup
 
@@ -114,7 +78,7 @@ VITE_API_URL=https://your-backend-url.com/api
 4. Create OAuth 2.0 credentials (Web application)
 5. Add authorized redirect URIs:
    - `http://localhost:5000/api/auth/callback` (development)
-   - `https://your-domain.com/api/auth/callback` (production)
+   - `https://YOUR_DOMAIN/api/auth/callback` (production)
 6. Download credentials as JSON file
 
 ## Features Overview

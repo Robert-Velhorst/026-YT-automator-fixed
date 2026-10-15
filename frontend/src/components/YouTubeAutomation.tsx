@@ -18,9 +18,9 @@ import AuthenticationStatus from './AuthenticationStatus';
 const API_BASE_URL = (import.meta.env.VITE_API_URL?.trim() || (import.meta.env.DEV ? 'http://localhost:5000/api' : '')).replace(/\/$/, '');
 
 async function apiFetch(path: string, options?: RequestInit) {
-  if (!API_BASE_URL) throw new Error('Backend API is not configured. Set VITE_API_URL in Vercel and redeploy.');
+  if (!API_BASE_URL) throw new Error('Backend API is not configured. Set VITE_API_URL for the frontend build and redeploy.');
   if (import.meta.env.PROD && /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(API_BASE_URL)) {
-    throw new Error('VITE_API_URL points to a local address. Configure the public HTTPS backend URL in Vercel.');
+    throw new Error('VITE_API_URL points to a local address. Configure the public HTTPS API URL for the production frontend build.');
   }
   try { return await fetch(`${API_BASE_URL}${path}`, options); }
   catch { throw new Error(`Cannot connect to the backend at ${API_BASE_URL}. Check the deployment and CORS configuration.`); }
