@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CalendarClock, Check, Clock, FileVideo, History, Loader2, LogOut, Play, RefreshCw, Settings, Sparkles, Upload, Youtube } from "lucide-react";
+import { AlertCircle, CalendarClock, Check, Clock, FileVideo, History, Loader2, LogOut, Play, RefreshCw, Settings, Sparkles, Upload, Video } from "lucide-react";
 import { api, ApiFailure, Draft, Job } from "@/lib/api";
 
 type View = "overview" | "upload" | "drafts" | "schedule" | "history" | "settings";
@@ -27,7 +27,10 @@ export default function Index() {
     } catch (e) { setError((e as Error).message); }
   }, [selectedId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void refresh(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [refresh]);
   useEffect(() => { const timer = window.setInterval(refresh, 5000); return () => window.clearInterval(timer); }, [refresh]);
 
   const act = async (name: string, fn: () => Promise<unknown>, reload = true) => {
@@ -50,7 +53,7 @@ export default function Index() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span><Youtube size={22}/></span><div>StudioPilot<small>YouTube operations</small></div></div>
+      <div className="brand"><span><Video size={22}/></span><div>StudioPilot<small>YouTube operations</small></div></div>
       <nav>
         <Nav active={view === "overview"} onClick={() => setView("overview")} icon={<Play/>}>Overview</Nav>
         <Nav active={view === "upload"} onClick={() => setView("upload")} icon={<Upload/>}>Upload videos</Nav>
@@ -79,8 +82,8 @@ export default function Index() {
 function Nav({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) { return <button className={active ? "active" : ""} onClick={onClick}>{icon}<span>{children}</span></button>; }
 
 function Overview({ counts, drafts, jobs, auth, openDraft, setView }: any) { return <>
-  <section className="hero"><div><p>YOUR CONTENT PIPELINE</p><h2>From raw footage<br/>to <i>published.</i></h2><span>Prepare metadata, transcripts, thumbnails and publishing jobs without losing track of the real YouTube state.</span><button className="primary" onClick={() => setView("upload")}><Upload size={17}/> Add videos</button></div><div className="orbit"><Youtube size={54}/></div></section>
-  {!auth.authenticated && <section className="connect-card"><div className="youtube-icon"><Youtube/></div><div><strong>Connect your YouTube channel</strong><p>Draft preparation works now. Connect Google before a worker can publish.</p></div><button onClick={() => setView("settings")}>Connect channel</button></section>}
+  <section className="hero"><div><p>YOUR CONTENT PIPELINE</p><h2>From raw footage<br/>to <i>published.</i></h2><span>Prepare metadata, transcripts, thumbnails and publishing jobs without losing track of the real YouTube state.</span><button className="primary" onClick={() => setView("upload")}><Upload size={17}/> Add videos</button></div><div className="orbit"><Video size={54}/></div></section>
+  {!auth.authenticated && <section className="connect-card"><div className="youtube-icon"><Video/></div><div><strong>Connect your YouTube channel</strong><p>Draft preparation works now. Connect Google before a worker can publish.</p></div><button onClick={() => setView("settings")}>Connect channel</button></section>}
   <section className="metric-grid"><Metric label="Drafts to review" value={counts.drafts} detail="Needs your approval"/><Metric label="Active jobs" value={counts.active} detail="Queued or scheduled"/><Metric label="Published" value={counts.uploaded} detail="Confirmed by YouTube"/><Metric label="Needs attention" value={counts.failed} detail="Retryable failures" warning={counts.failed > 0}/></section>
   <section className="split"><div className="panel"><PanelTitle title="Recent drafts" action="View all" onClick={() => setView("drafts")}/>{drafts.slice(0,4).map((d: Draft) => <DraftRow key={d.id} draft={d} onClick={() => openDraft(d)}/>)}{!drafts.length && <Empty text="No drafts yet. Upload a video to begin."/>}</div><div className="panel"><PanelTitle title="Recent activity" action="View jobs" onClick={() => setView("schedule")}/>{jobs.slice(0,5).map((j: Job) => <div className="activity" key={j.id}><span className={`status-dot ${j.status}`}/><div><strong>{statusLabel[j.status] || j.status}</strong><small>{new Date(j.run_at).toLocaleString()}</small></div><b>{j.progress}%</b></div>)}{!jobs.length && <Empty text="Job activity will appear here."/>}</div></section>
 </>; }
@@ -109,4 +112,4 @@ function ToolButton({ busy, onClick, title, note }: any) { return <button classN
 
 function Jobs({ jobs, drafts, busy, act }: any) { return <section className="panel"><PanelTitle title="Upload job queue" action="Refreshes automatically" onClick={()=>{}}/>{jobs.map((j: Job) => <div className="job-row" key={j.id}><span className={`status-dot ${j.status}`}/><div><strong>{drafts.find((d:Draft)=>d.id===j.draft_id)?.title || "Video upload"}</strong><small>{statusLabel[j.status] || j.status} · attempt {j.retry_count + 1} · {new Date(j.run_at).toLocaleString()}</small>{j.last_error && <p>{j.last_error}</p>}</div><div className="progress"><span style={{width:`${j.progress}%`}}/></div>{j.status === "failed" && <button disabled={!!busy} onClick={() => act("retry", () => api.retry(j.id))}>Retry</button>}{["queued","scheduled","retry_pending"].includes(j.status) && <button onClick={() => act("cancel", () => api.cancel(j.id))}>Cancel</button>}{j.status === "uploaded" && <Check/>}</div>)}{!jobs.length && <Empty text="No upload jobs yet."/>}</section>; }
 function HistoryPanel({ drafts }: { drafts: Draft[] }) { const items=drafts.filter(d=>["uploaded","failed"].includes(d.status)); return <section className="panel"><h3>Real upload outcomes</h3>{items.map(d=><div className="history-row" key={d.id}><span className={`status-dot ${d.status}`}/><div><strong>{d.title}</strong><small>{new Date(d.created_at).toLocaleDateString()} · {statusLabel[d.status]}</small></div>{d.youtube_url && <a href={d.youtube_url} target="_blank" rel="noreferrer">Open on YouTube ↗</a>}</div>)}{!items.length&&<Empty text="Confirmed uploads and failures will appear here."/>}</section>; }
-function SettingsPanel({ checks, auth, act }: any) { const connect=()=>act("connect", async()=>{ const {auth_url}=await api.login(); window.location.href=auth_url; }, false); return <div className="settings-grid"><section className="panel"><h3>YouTube connection</h3><div className="setting-state"><Youtube/><div><strong>{auth.authenticated ? auth.channel?.title : "No channel connected"}</strong><small>{auth.authenticated ? "OAuth credentials stored encrypted" : "Official Google OAuth is required to publish"}</small></div></div>{auth.authenticated ? <button onClick={()=>act("logout",()=>api.logout())}><LogOut/> Disconnect</button> : <button className="primary" onClick={connect}><Youtube/> Connect with Google</button>}</section><section className="panel"><h3>Service readiness</h3>{Object.entries(checks).map(([name, ok])=><div className="check" key={name}>{ok?<Check/>:<AlertCircle/>}<span>{name.replace(/_/g, " ")}</span><b>{ok?"Ready":"Not configured"}</b></div>)}</section><section className="panel note"><h3>Operator safeguards</h3><p>Uploads run through the durable worker. A draft is never marked published until the YouTube API returns its video ID. Thumbnail and playlist post-processing failures stay visible without falsifying the video result.</p></section></div>; }
+function SettingsPanel({ checks, auth, act }: any) { const connect=()=>act("connect", async()=>{ const {auth_url}=await api.login(); window.location.href=auth_url; }, false); return <div className="settings-grid"><section className="panel"><h3>YouTube connection</h3><div className="setting-state"><Video/><div><strong>{auth.authenticated ? auth.channel?.title : "No channel connected"}</strong><small>{auth.authenticated ? "OAuth credentials stored encrypted" : "Official Google OAuth is required to publish"}</small></div></div>{auth.authenticated ? <button onClick={()=>act("logout",()=>api.logout())}><LogOut/> Disconnect</button> : <button className="primary" onClick={connect}><Video/> Connect with Google</button>}</section><section className="panel"><h3>Service readiness</h3>{Object.entries(checks).map(([name, ok])=><div className="check" key={name}>{ok?<Check/>:<AlertCircle/>}<span>{name.replace(/_/g, " ")}</span><b>{ok?"Ready":"Not configured"}</b></div>)}</section><section className="panel note"><h3>Operator safeguards</h3><p>Uploads run through the durable worker. A draft is never marked published until the YouTube API returns its video ID. Thumbnail and playlist post-processing failures stay visible without falsifying the video result.</p></section></div>; }
