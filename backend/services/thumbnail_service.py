@@ -1,216 +1,65 @@
-"""
-Thumbnail generation service
-"""
+from pathlib import Path
+from textwrap import wrap
 
-import logging
-import tempfile
-import os
 from PIL import Image, ImageDraw, ImageFont
-import requests
-from io import BytesIO
 
-logger = logging.getLogger(__name__)
 
-def generate_thumbnail(video_path=None, title=None, template_style='modern'):
-    """
-    Generate thumbnail for video
-    
-    Args:
-        video_path (str): Path to video file (optional)
-        title (str): Video title for thumbnail text
-        template_style (str): Style template to use
-    
-    Returns:
-        str: Path to generated thumbnail or None if failed
-    """
-    try:
-        logger.info(f"Generating thumbnail with style: {template_style}")
-        
-        # Create a basic thumbnail using PIL
-        width, height = 1280, 720  # YouTube recommended size
-        
-        # Create base image
-        if template_style == 'modern':
-            bg_color = (45, 45, 45)  # Dark gray
-            text_color = (255, 255, 255)  # White
-            accent_color = (255, 0, 0)  # YouTube red
-        elif template_style == 'bright':
-            bg_color = (255, 255, 255)  # White
-            text_color = (0, 0, 0)  # Black
-            accent_color = (0, 123, 255)  # Blue
-        else:
-            bg_color = (30, 30, 30)  # Very dark
-            text_color = (255, 255, 255)  # White
-            accent_color = (255, 165, 0)  # Orange
-        
-        # Create image
-        img = Image.new('RGB', (width, height), bg_color)
-        draw = ImageDraw.Draw(img)
-        
-        # Add gradient effect (simple version)
-        for y in range(height):
-            alpha = int(255 * (1 - y / height) * 0.3)
-            overlay_color = tuple(min(255, c + alpha) for c in bg_color)
-            draw.line([(0, y), (width, y)], fill=overlay_color)
-        
-        # Add title text if provided
-        if title:
-            try:
-                # Try to use a better font, fall back to default
-                font_size = 72
-                try:
-                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-                except:
-                    font = ImageFont.load_default()
-                
-                # Wrap text to fit
-                words = title.split()
-                lines = []
-                current_line = []
-                
-                for word in words:
-                    test_line = ' '.join(current_line + [word])
-                    bbox = draw.textbbox((0, 0), test_line, font=font)
-                    if bbox[2] - bbox[0] <= width - 100:  # Leave margin
-                        current_line.append(word)
-                    else:
-                        if current_line:
-                            lines.append(' '.join(current_line))
-                            current_line = [word]
-                        else:
-                            lines.append(word)
-                
-                if current_line:
-                    lines.append(' '.join(current_line))
-                
-                # Draw text lines
-                total_height = len(lines) * (font_size + 10)
-                start_y = (height - total_height) // 2
-                
-                for i, line in enumerate(lines):
-                    bbox = draw.textbbox((0, 0), line, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    x = (width - text_width) // 2
-                    y = start_y + i * (font_size + 10)
-                    
-                    # Draw text shadow
-                    draw.text((x + 3, y + 3), line, font=font, fill=(0, 0, 0, 128))
-                    # Draw main text
-                    draw.text((x, y), line, font=font, fill=text_color)
-                
-            except Exception as e:
-                logger.warning(f"Error adding text to thumbnail: {e}")
-        
-        # Add decorative elements
-        # Corner accent
-        draw.rectangle([0, 0, 50, height], fill=accent_color)
-        draw.rectangle([width-50, 0, width, height], fill=accent_color)
-        
-        # Save thumbnail
-        temp_dir = tempfile.mkdtemp()
-        thumbnail_path = os.path.join(temp_dir, 'thumbnail.jpg')
-        img.save(thumbnail_path, 'JPEG', quality=95)
-        
-        logger.info(f"Thumbnail generated: {thumbnail_path}")
-        return thumbnail_path
-        
-    except Exception as e:
-        logger.error(f"Thumbnail generation error: {e}")
-        return None
+STYLES = {
+    "modern": {"background": (25, 46, 42), "text": (248, 250, 247), "accent": (238, 100, 83)},
+    "bright": {"background": (240, 226, 194), "text": (24, 44, 39), "accent": (36, 116, 96)},
+    "bold": {"background": (29, 30, 35), "text": (255, 255, 255), "accent": (246, 196, 76)},
+}
 
-def extract_frame_from_video(video_path, timestamp=None):
-    """
-    Extract a frame from video to use as thumbnail base
-    
-    Args:
-        video_path (str): Path to video file
-        timestamp (float): Time in seconds to extract frame (default: middle)
-    
-    Returns:
-        str: Path to extracted frame or None if failed
-    """
-    try:
-        # This would use FFmpeg to extract a frame
-        # Example: ffmpeg -i video.mp4 -ss 00:00:30 -vframes 1 frame.jpg
-        
-        logger.info(f"Extracting frame from video: {video_path}")
-        
-        # Placeholder implementation
-        # In real implementation:
-        # import subprocess
-        # if timestamp is None:
-        #     timestamp = get_video_duration(video_path) / 2  # Middle of video
-        # 
-        # temp_dir = tempfile.mkdtemp()
-        # frame_path = os.path.join(temp_dir, 'frame.jpg')
-        # 
-        # cmd = ['ffmpeg', '-i', video_path, '-ss', str(timestamp), '-vframes', '1', frame_path]
-        # result = subprocess.run(cmd, capture_output=True, text=True)
-        # 
-        # if result.returncode == 0:
-        #     return frame_path
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f"Frame extraction error: {e}")
-        return None
 
-def create_custom_thumbnail(background_image=None, title=None, subtitle=None, style_config=None):
-    """
-    Create custom thumbnail with advanced options
-    
-    Args:
-        background_image (str): Path to background image
-        title (str): Main title text
-        subtitle (str): Subtitle text
-        style_config (dict): Style configuration
-    
-    Returns:
-        str: Path to generated thumbnail or None if failed
-    """
-    try:
-        if style_config is None:
-            style_config = {
-                'width': 1280,
-                'height': 720,
-                'title_font_size': 72,
-                'subtitle_font_size': 36,
-                'title_color': (255, 255, 255),
-                'subtitle_color': (200, 200, 200),
-                'background_color': (45, 45, 45),
-                'overlay_opacity': 0.7
-            }
-        
-        width = style_config['width']
-        height = style_config['height']
-        
-        # Create base image
-        if background_image and os.path.exists(background_image):
-            img = Image.open(background_image)
-            img = img.resize((width, height), Image.Resampling.LANCZOS)
-            
-            # Add overlay for text readability
-            overlay = Image.new('RGBA', (width, height), (0, 0, 0, int(255 * style_config['overlay_opacity'])))
-            img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
-        else:
-            img = Image.new('RGB', (width, height), style_config['background_color'])
-        
-        draw = ImageDraw.Draw(img)
-        
-        # Add title and subtitle
-        if title:
-            # Implementation for custom text rendering
-            pass
-        
-        # Save thumbnail
-        temp_dir = tempfile.mkdtemp()
-        thumbnail_path = os.path.join(temp_dir, 'custom_thumbnail.jpg')
-        img.save(thumbnail_path, 'JPEG', quality=95)
-        
-        return thumbnail_path
-        
-    except Exception as e:
-        logger.error(f"Custom thumbnail creation error: {e}")
-        return None
+def _font(size):
+    candidates = (
+        "C:/Windows/Fonts/arialbd.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    )
+    for candidate in candidates:
+        if Path(candidate).is_file():
+            return ImageFont.truetype(candidate, size)
+    return ImageFont.load_default()
 
+
+def _fit_lines(draw, title, max_width, max_lines=4):
+    title = " ".join(str(title or "New video").split())
+    for size in range(76, 35, -4):
+        font = _font(size)
+        approximate = max(10, int(max_width / max(1, size * 0.58)))
+        lines = wrap(title, width=approximate, break_long_words=True, break_on_hyphens=True)
+        if len(lines) <= max_lines and all(draw.textbbox((0, 0), line, font=font)[2] <= max_width for line in lines):
+            return font, lines
+    return _font(36), wrap(title, width=42, break_long_words=True)[:max_lines]
+
+
+def generate_thumbnail(output_path, title=None, template_style="modern"):
+    style = STYLES.get(template_style, STYLES["modern"])
+    width, height = 1280, 720
+    image = Image.new("RGB", (width, height), style["background"])
+    draw = ImageDraw.Draw(image)
+
+    for y in range(height):
+        ratio = y / height
+        shade = tuple(max(0, min(255, int(value * (1.04 - ratio * 0.18)))) for value in style["background"])
+        draw.line((0, y, width, y), fill=shade)
+    draw.rectangle((0, 0, 28, height), fill=style["accent"])
+    draw.rectangle((width - 8, 0, width, height), fill=style["accent"])
+    draw.ellipse((930, -130, 1370, 310), outline=style["accent"], width=7)
+
+    font, lines = _fit_lines(draw, title, 1050)
+    line_height = max(54, font.size + 12 if hasattr(font, "size") else 60)
+    block_height = len(lines) * line_height
+    y = max(90, (height - block_height) // 2)
+    for line in lines:
+        draw.text((88, y + 4), line, font=font, fill=(0, 0, 0), stroke_width=2)
+        draw.text((84, y), line, font=font, fill=style["text"])
+        y += line_height
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".tmp.jpg")
+    image.save(temporary, "JPEG", quality=90, optimize=True, progressive=True)
+    temporary.replace(output)
+    return str(output)

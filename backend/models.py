@@ -117,18 +117,30 @@ class UploadJob(TimestampMixin, db.Model):
     run_at = db.Column(db.DateTime(timezone=True), default=now, nullable=False, index=True)
     locked_at = db.Column(db.DateTime(timezone=True))
     worker_id = db.Column(db.String(128))
+    lease_expires_at = db.Column(db.DateTime(timezone=True), index=True)
     progress = db.Column(db.Integer, default=0, nullable=False)
     retry_count = db.Column(db.Integer, default=0, nullable=False)
     max_retries = db.Column(db.Integer, default=3, nullable=False)
     last_error = db.Column(db.Text)
     cancelled_at = db.Column(db.DateTime(timezone=True))
     completed_at = db.Column(db.DateTime(timezone=True))
+    idempotency_key = db.Column(db.String(128), unique=True, index=True)
+    upload_session_uri = db.Column(db.Text)
+    youtube_video_id = db.Column(db.String(64), index=True)
+    processing_status = db.Column(db.String(32))
+    processing_checked_at = db.Column(db.DateTime(timezone=True))
+    verification_attempts = db.Column(db.Integer, default=0, nullable=False)
+    postprocess_json = db.Column(db.Text, default="{}", nullable=False)
 
     def to_dict(self, include_logs=False):
         result = {"id": self.id, "draft_id": self.draft_id, "batch_id": self.batch_id,
                   "status": self.status, "progress": self.progress, "retry_count": self.retry_count,
                   "max_retries": self.max_retries, "run_at": self.run_at.isoformat(),
-                  "last_error": self.last_error, "created_at": self.created_at.isoformat()}
+                  "last_error": self.last_error, "youtube_video_id": self.youtube_video_id,
+                  "processing_status": self.processing_status,
+                  "verification_attempts": self.verification_attempts,
+                  "created_at": self.created_at.isoformat(),
+                  "updated_at": self.updated_at.isoformat()}
         if include_logs:
             result["logs"] = [log.to_dict() for log in JobLog.query.filter_by(job_id=self.id).order_by(JobLog.created_at).all()]
         return result
@@ -156,3 +168,37 @@ class ErrorLog(db.Model):
     message = db.Column(db.Text, nullable=False)
     details_json = db.Column(db.Text)
     created_at = db.Column(db.DateTime(timezone=True), default=now, nullable=False)
+
+
+class WorkerHeartbeat(db.Model):
+    worker_id = db.Column(db.String(128), primary_key=True)
+    hostname = db.Column(db.String(255), nullable=False)
+    process_id = db.Column(db.Integer, nullable=False)
+    started_at = db.Column(db.DateTime(timezone=True), default=now, nullable=False)
+    last_seen_at = db.Column(db.DateTime(timezone=True), default=now, nullable=False, index=True)
+    current_job_id = db.Column(db.String(36), db.ForeignKey("upload_job.id"))
+
+
+class AuditEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    actor = db.Column(db.String(64), nullable=False, index=True)
+    action = db.Column(db.String(96), nullable=False, index=True)
+    target_type = db.Column(db.String(64))
+    target_id = db.Column(db.String(128), index=True)
+    request_id = db.Column(db.String(36), index=True)
+    details_json = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), default=now, nullable=False, index=True)
+
+
+class ConnectorAction(TimestampMixin, db.Model):
+    id = db.Column(db.String(36), primary_key=True, default=uid)
+    connector = db.Column(db.String(32), nullable=False, index=True)
+    idempotency_key = db.Column(db.String(128), nullable=False, unique=True, index=True)
+    action = db.Column(db.String(64), nullable=False)
+    status = db.Column(db.String(32), nullable=False, default="started")
+    task_id = db.Column(db.String(128))
+    approval_source = db.Column(db.String(255))
+    approval_digest = db.Column(db.String(128))
+    request_json = db.Column(db.Text, nullable=False, default="{}")
+    response_json = db.Column(db.Text)
+    error = db.Column(db.Text)

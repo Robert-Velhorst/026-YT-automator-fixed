@@ -12,6 +12,9 @@ backend/uploads/
 backend/generated/
 backend/instance/
 logs/
+.runtime/
+.playwright-cli/
+output/playwright/
 *.log
 __pycache__/
 *.py[cod]
