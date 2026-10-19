@@ -10,7 +10,7 @@ if (-not (Test-Path $StateFile)) {
 }
 $State = Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json
 if ([IO.Path]::GetFullPath($State.root) -ne [IO.Path]::GetFullPath($Root)) { throw "Runtime state belongs to a different workspace." }
-$Markers = @{ api = "waitress"; worker = "worker.py"; ngrok = "ngrok" }
+$Markers = @{ api = "waitress"; worker = "worker.py" }
 function Stop-RecordedTree([int]$RootId, [string]$Marker, [string]$Name) {
     $Processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
     $RootProcess = $Processes | Where-Object { $_.ProcessId -eq $RootId } | Select-Object -First 1
@@ -31,7 +31,7 @@ function Stop-RecordedTree([int]$RootId, [string]$Marker, [string]$Name) {
     }
     Write-Host "Stopped $Name."
 }
-foreach ($Name in @("worker", "api", "ngrok")) {
+foreach ($Name in @("worker", "api")) {
     $Id = $State.processes.$Name
     if (-not $Id) { continue }
     Stop-RecordedTree $Id $Markers[$Name] $Name

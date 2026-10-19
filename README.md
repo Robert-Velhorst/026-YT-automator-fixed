@@ -10,25 +10,25 @@ StudioPilot is a single-operator YouTube preparation and publishing workspace. I
 - `scripts/windows/`: guarded Windows 11 setup, start, stop, and diagnostics.
 - `GET /.well-known/hai-connector.json`: HAI connector discovery contract.
 
-The production frontend is built once and served by Flask. Browser calls use same-origin `/api`, so a single local or ngrok URL serves the complete application.
+The production frontend is built once and served by Flask. Browser calls use same-origin `/api`, so one local URL serves the desktop application and the configured Hetzner HTTPS URL serves production.
 
 ## Windows 11
 
-Prerequisites: Python 3.11-3.13, Node.js 20.19+/22/24 LTS, and npm. FFmpeg is required only for long-video transcription. ngrok is required only for public access.
+Prerequisites: Python 3.13-3.15, Node.js 24.22.0 LTS or 26.12.0 Current, and npm. Production uses Python 3.15 and Node.js 26.12.0. FFmpeg is required only for long-video transcription.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup.ps1
 .\studiopilot.cmd
 ```
 
-Open `http://127.0.0.1:5000`. Local loopback requests can use the configured bypass; access over ngrok always requires the operator password chosen during setup.
+Open `http://127.0.0.1:5000`. The Windows launcher is loopback-only. Production access is through the approved Hetzner deployment and requires the operator password.
 
 ```powershell
 .\studiopilot.cmd doctor
 .\studiopilot.cmd stop
 ```
 
-See [Windows and ngrok operations](docs/WINDOWS_NGROK.md).
+See [Windows operations](docs/WINDOWS_OPERATIONS.md).
 
 ## YouTube connection
 
@@ -37,7 +37,7 @@ See [Windows and ngrok operations](docs/WINDOWS_NGROK.md).
 3. Put the downloaded client JSON outside this repository and set its absolute path as `GOOGLE_CLIENT_SECRETS_FILE` in `backend/.env`.
 4. Keep the generated `TOKEN_ENCRYPTION_KEY`; it encrypts OAuth credentials and resumable-upload session URLs at rest.
 5. For local use, authorize `http://127.0.0.1:5000/api/auth/callback` in Google Cloud.
-6. For ngrok, authorize the stable HTTPS ngrok URL plus `/api/auth/callback`, then start with that domain.
+6. For production, authorize the exact Hetzner HTTPS URL plus `/api/auth/callback` and set the matching `PUBLIC_BASE_URL`.
 
 StudioPilot requests YouTube upload, read, and force-SSL scopes. Google may require consent-screen verification for external users. YouTube quota and provider authorization are external acceptance gates; the application reports them as failures rather than simulating success.
 
@@ -60,7 +60,7 @@ See [HAI connector](docs/HAI_CONNECTOR.md).
 ## Development
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.15 -m venv .venv
 .\.venv\Scripts\python -m pip install -r backend\requirements-dev.txt
 cd backend
 ..\.venv\Scripts\python -m flask --app app db upgrade
@@ -92,7 +92,7 @@ Copy [`.env.example`](.env.example) to `backend/.env`, or let the Windows setup 
 | `FFMPEG_PATH` | FFmpeg executable used to chunk long audio locally |
 | `HAI_CONNECTOR_ENABLED` / `HAI_CONNECTOR_TOKEN` | Optional isolated HAI access |
 
-Public and production startup fails closed when authentication, HTTPS, or secrets are unsafe.
+Public and production startup fails closed when authentication, HTTPS, or secrets are unsafe. Hetzner is the production target; this repository does not include a public-tunnel launcher.
 
 ## Containers
 

@@ -25,36 +25,36 @@ $PythonForSetup = if (Test-Path $VenvPython) {
     $PythonExecutable
 } else {
     if (-not (Get-Command py.exe -ErrorAction SilentlyContinue)) {
-        throw "Python 3.11-3.13 is required. Install Python from python.org, including the py launcher."
+        throw "Python 3.13-3.15 is required. Install Python from python.org, including the py launcher."
     }
-    $SupportedLauncher = @("-3.13", "-3.12", "-3.11") | Where-Object {
+$SupportedLauncher = @("-3.15", "-3.14", "-3.13") | Where-Object {
         & py.exe $_ -c "import sys" 2>$null
         $LASTEXITCODE -eq 0
     } | Select-Object -First 1
     if (-not $SupportedLauncher) {
-        throw "Python 3.11-3.13 is required. Install Python from python.org, including the py launcher."
+        throw "Python 3.13-3.15 is required. Install Python from python.org, including the py launcher."
     }
     $PythonForSetupArgs = @($SupportedLauncher)
     "py.exe"
 }
 if (-not (Get-Command $PythonForSetup -ErrorAction SilentlyContinue)) {
-    throw "Python 3.11-3.13 is required. Install Python from python.org, including the py launcher."
+    throw "Python 3.13-3.15 is required. Install Python from python.org, including the py launcher."
 }
 $VersionArgs = @($PythonForSetupArgs + @("-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"))
 $Version = & $PythonForSetup @VersionArgs
 $Parts = $Version.Split(".")
-if ([int]$Parts[0] -ne 3 -or [int]$Parts[1] -lt 11 -or [int]$Parts[1] -gt 13) {
-    throw "Python 3.11-3.13 is required; py -3 selected $Version."
+if ([int]$Parts[0] -ne 3 -or [int]$Parts[1] -lt 13 -or [int]$Parts[1] -gt 15) {
+    throw "Python 3.13-3.15 is required; py -3 selected $Version."
 }
 
 Write-Host "Checking Node.js..."
 $Node = Get-Command $NodeExecutable -ErrorAction SilentlyContinue
 $Npm = if ($NpmCli) { Test-Path $NpmCli } else { [bool](Get-Command npm.cmd -ErrorAction SilentlyContinue) }
-if (-not $Node -or -not $Npm) { throw "Node.js 20, 22, or 24 LTS with npm is required." }
-$NodeMajor = [int]((& $NodeExecutable --version).TrimStart("v").Split(".")[0])
-if ($NodeMajor -lt 20 -or $NodeMajor -ge 25) { throw "Use Node.js 20, 22, or 24 LTS. Detected Node.js $NodeMajor." }
+if (-not $Node -or -not $Npm) { throw "Node.js 24.22.0 LTS or 26.12.0 Current with npm is required." }
 $NodeVersion = [Version]((& $NodeExecutable --version).TrimStart("v"))
-if ($NodeVersion.Major -eq 20 -and $NodeVersion -lt [Version]"20.19.0") { throw "Node.js 20.19 or newer is required." }
+$NodeSupported = ($NodeVersion.Major -eq 24 -and $NodeVersion -ge [Version]"24.22.0") -or `
+    ($NodeVersion.Major -eq 26 -and $NodeVersion -ge [Version]"26.12.0") -or $NodeVersion.Major -gt 26
+if (-not $NodeSupported) { throw "Node.js 24.22.0 LTS or 26.12.0 Current is required. Detected Node.js $NodeVersion." }
 
 if (-not (Test-Path $VenvPython)) {
     Write-Host "Creating the private Python environment..."
@@ -67,7 +67,7 @@ if ($LASTEXITCODE -ne 0) { throw "Backend dependency installation failed." }
 
 if (-not (Test-Path $BackendEnv)) {
     if (-not $OperatorPassword) {
-        $OperatorPassword = Get-PlainText (Read-Host "Choose an operator password for public/ngrok access" -AsSecureString)
+        $OperatorPassword = Get-PlainText (Read-Host "Choose an operator password for provider and production access" -AsSecureString)
     }
     if ($OperatorPassword.Length -lt 12) { throw "The operator password must contain at least 12 characters." }
     $env:STUDIOPILOT_SETUP_PASSWORD = $OperatorPassword
