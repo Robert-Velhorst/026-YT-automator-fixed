@@ -1,7 +1,5 @@
 [CmdletBinding()]
 param(
-    [switch]$Public,
-    [string]$NgrokDomain,
     [int]$Port = 5000,
     [switch]$OpenBrowser
 )
@@ -48,47 +46,12 @@ while (-not (Test-PortAvailable $Port) -and $Port -lt 65535) { $Port++ }
 if ($Port -ne $RequestedPort) { Write-Warning "Port $RequestedPort is in use; using $Port instead." }
 
 $Started = [ordered]@{}
-$PublicUrl = $null
 try {
-    if ($Public) {
-        $Ngrok = Get-Command ngrok.exe -ErrorAction SilentlyContinue
-        if (-not $Ngrok) { throw "ngrok is required for -Public. Install it and run ngrok config add-authtoken first." }
-        $HashLine = Select-String -LiteralPath $EnvFile -Pattern '^OPERATOR_PASSWORD_HASH=(.+)$'
-        if (-not $HashLine -or -not $HashLine.Matches[0].Groups[1].Value) {
-            throw "Public mode requires OPERATOR_PASSWORD_HASH in backend\.env. Re-run setup or add a Werkzeug password hash."
-        }
-        $NgrokApiPort = 4040
-        while (-not (Test-PortAvailable $NgrokApiPort) -and $NgrokApiPort -lt 65535) { $NgrokApiPort++ }
-        $DefaultNgrokConfig = Join-Path $env:LOCALAPPDATA "ngrok\ngrok.yml"
-        if (-not (Test-Path $DefaultNgrokConfig)) { throw "The default ngrok configuration was not found. Run ngrok config add-authtoken first." }
-        $NgrokOverride = Join-Path $Runtime "ngrok-agent.yml"
-        @("version: 3", "agent:", "  web_addr: 127.0.0.1:$NgrokApiPort") | Set-Content -LiteralPath $NgrokOverride -Encoding ascii
-        $Arguments = @("http", "$Port", "--log=stdout", "--config", $DefaultNgrokConfig, "--config", $NgrokOverride)
-        if ($NgrokDomain) { $Arguments += "--url=$NgrokDomain" }
-        $NgrokProcess = Start-Process -FilePath $Ngrok.Source -ArgumentList $Arguments -WindowStyle Hidden -PassThru `
-            -RedirectStandardOutput (Join-Path $Runtime "ngrok.out.log") -RedirectStandardError (Join-Path $Runtime "ngrok.err.log")
-        $Started.ngrok = $NgrokProcess.Id
-        for ($attempt = 0; $attempt -lt 120 -and -not $PublicUrl; $attempt++) {
-            Start-Sleep -Milliseconds 500
-            if ($NgrokProcess.HasExited) { break }
-            try {
-                $Tunnels = Invoke-RestMethod -Uri "http://127.0.0.1:$NgrokApiPort/api/tunnels" -TimeoutSec 2
-                $PublicUrl = ($Tunnels.tunnels | Where-Object { $_.proto -eq "https" } | Select-Object -First 1).public_url
-            } catch { }
-        }
-        if (-not $PublicUrl) { throw "ngrok did not expose an HTTPS tunnel. Check .runtime\ngrok.err.log for endpoint or account conflicts." }
-        $env:APP_ENV = "production"
-        $env:PUBLIC_BASE_URL = $PublicUrl
-        $env:FRONTEND_URL = $PublicUrl
-        $env:CORS_ORIGINS = $PublicUrl
-        $env:LOCAL_AUTH_BYPASS = "false"
-    } else {
-        $env:APP_ENV = "development"
-        $env:PUBLIC_BASE_URL = ""
-        $env:FRONTEND_URL = "http://127.0.0.1:$Port"
-        $env:CORS_ORIGINS = "http://127.0.0.1:$Port,http://localhost:$Port"
-        $env:LOCAL_AUTH_BYPASS = "true"
-    }
+    $env:APP_ENV = "development"
+    $env:PUBLIC_BASE_URL = ""
+    $env:FRONTEND_URL = "http://127.0.0.1:$Port"
+    $env:CORS_ORIGINS = "http://127.0.0.1:$Port,http://localhost:$Port"
+    $env:LOCAL_AUTH_BYPASS = "true"
     $env:PORT = "$Port"
 
     Push-Location $Backend
@@ -118,12 +81,10 @@ try {
         started_at = [DateTime]::UtcNow.ToString("o")
         root = $Root
         port = $Port
-        ngrok_api_port = $NgrokApiPort
-        public_url = $PublicUrl
         processes = $Started
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $StateFile -Encoding utf8
 
-    $Url = if ($PublicUrl) { $PublicUrl } else { "http://127.0.0.1:$Port" }
+    $Url = "http://127.0.0.1:$Port"
     Write-Host "StudioPilot is running at $Url"
     if ($OpenBrowser) { Start-Process $Url }
 } catch {

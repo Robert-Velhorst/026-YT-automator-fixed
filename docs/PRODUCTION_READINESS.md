@@ -35,10 +35,12 @@ Then run `scripts\windows\doctor.ps1`, start the app, and test desktop and mobil
 These cannot be proven by repository tests alone:
 
 - Google consent-screen and YouTube scope approval.
-- Exact local or stable ngrok OAuth callback registration.
+- Exact Hetzner HTTPS OAuth callback registration and matching `PUBLIC_BASE_URL`.
 - Live channel authorization and available YouTube quota.
 - A real video upload plus YouTube processing completion.
 - Optional OpenAI billing/access and local FFmpeg installation.
 - HAI registration in the target HAI deployment.
 
 Do not call the app provider-ready until those checks pass with owner credentials. No test or local template represents a live provider success.
+
+Hetzner is the required production target. Verify the deployed service, database, media storage, secrets, TLS/DNS, backups, monitoring, and rollback before calling cutover complete.

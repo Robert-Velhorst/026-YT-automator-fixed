@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$Public)
+param()
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
@@ -8,7 +8,6 @@ $Checks = [ordered]@{
     "Backend environment" = Test-Path (Join-Path $Root "backend\.env")
     "Built interface" = Test-Path (Join-Path $Root "frontend\dist\index.html")
     "FFmpeg for long transcription" = [bool](Get-Command ffmpeg.exe -ErrorAction SilentlyContinue)
-    "ngrok for public mode" = (-not $Public) -or [bool](Get-Command ngrok.exe -ErrorAction SilentlyContinue)
 }
 if ($Checks["Python environment"] -and $Checks["Backend environment"]) {
     Push-Location (Join-Path $Root "backend")
