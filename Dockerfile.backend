@@ -5,11 +5,12 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce
+FROM python:3.15.1-slim@sha256:08275f764e022331c6d3e3ca55d8cce01fa4684b02111adf0445d71806fe7941
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+COPY backend/requirements-py315.lock ./requirements.lock
+RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock && pip check
 COPY backend/ ./
 COPY --from=frontend-build /frontend/dist /frontend/dist
 RUN mkdir -p /app/instance /app/uploads /app/generated && useradd --system --uid 10001 studio && chown -R studio:studio /app /frontend
