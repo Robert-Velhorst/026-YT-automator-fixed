@@ -12,17 +12,59 @@ COPY sqlite-runtime.json ./
 COPY scripts/build_sqlite_runtime.py ./scripts/build_sqlite_runtime.py
 RUN python -I scripts/build_sqlite_runtime.py
 
+FROM rust:1.99.1-alpine3.24@sha256:b1d5dd5a22a09404d3e798c0cf051b689077360374eb505fa5bb93c479693d87 AS rust-sdk
+
+FROM sqlite-build AS native-build
+RUN apk --keys-dir /native-build/output/keys --no-network add /native-build/output/studiopilot-sqlite.apk \
+    && apk add --no-cache linux-headers perl pkgconf bison flex krb5-dev openldap-dev libffi-dev libstdc++
+COPY --from=rust-sdk /usr/local/rustup /usr/local/rustup
+COPY --from=rust-sdk /usr/local/cargo /usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo \
+    PATH=/opt/studiopilot-native/bin:/usr/local/cargo/bin:$PATH \
+    LD_LIBRARY_PATH=/opt/studiopilot-native/lib \
+    PKG_CONFIG_PATH=/opt/studiopilot-native/lib/pkgconfig \
+    OPENSSL_DIR=/opt/studiopilot-native OPENSSL_NO_VENDOR=1 OPENSSL_STATIC=0 \
+    PG_CONFIG=/opt/studiopilot-native/bin/pg_config \
+    RUSTFLAGS="-C link-arg=-Wl,-rpath,/opt/studiopilot-native/lib" \
+    CARGO_BUILD_JOBS=2 MATURIN_NO_INSTALL_RUST=1 \
+    MATURIN_PEP517_ARGS="--locked --compatibility linux --auditwheel skip"
+COPY native-client-runtime.json ./
+COPY scripts/build_native_client.py scripts/package_native_client.py scripts/build_python_tls.py scripts/lock_built_wheels.py ./scripts/
+RUN python -I scripts/build_native_client.py \
+    && python -I scripts/package_native_client.py \
+    && python scripts/build_python_tls.py
+COPY backend/requirements-native-build.lock backend/requirements-image.lock ./
+RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements-native-build.lock \
+    && rustc --version && cargo --version \
+    && pip wheel --no-cache-dir --no-deps --no-build-isolation --require-hashes \
+        --no-binary=cryptography,psycopg-c --wheel-dir /wheelhouse -r requirements-image.lock \
+    && python -I scripts/lock_built_wheels.py
+
 FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    LD_LIBRARY_PATH=/opt/studiopilot-native/lib PSYCOPG_IMPL=c
 WORKDIR /app
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache && apk add --no-cache krb5-libs libldap
 COPY --from=sqlite-build /native-build/output /tmp/studiopilot-sqlite
 RUN apk --keys-dir /tmp/studiopilot-sqlite/keys --no-network add /tmp/studiopilot-sqlite/studiopilot-sqlite.apk \
     && rm -rf /tmp/studiopilot-sqlite
 COPY sqlite-runtime.json ./sqlite-runtime.json
-COPY backend/requirements-py315.lock ./requirements.lock
-RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock \
+COPY --from=native-build /tmp/studiopilot-native-package-keys /tmp/studiopilot-native-package-keys
+COPY --from=native-build /tmp/studiopilot-libcrypto4.apk /tmp/studiopilot-libssl4.apk /tmp/studiopilot-libpq.apk /tmp/
+RUN apk --keys-dir /tmp/studiopilot-native-package-keys --no-network add \
+        /tmp/studiopilot-libcrypto4.apk /tmp/studiopilot-libssl4.apk /tmp/studiopilot-libpq.apk \
+    && rm -rf /tmp/studiopilot-native-package-keys /tmp/studiopilot-libcrypto4.apk /tmp/studiopilot-libssl4.apk /tmp/studiopilot-libpq.apk
+COPY --from=native-build /python-tls-runtime/lib-dynload/ /usr/local/lib/python3.15/lib-dynload/
+COPY --from=native-build /python-tls-runtime/provenance.json /python-tls-runtime/CPython-LICENSE /usr/share/doc/studiopilot-python-tls/
+COPY native-client-runtime.json ./native-client-runtime.json
+COPY scripts/installed_native_report.py /usr/local/bin/studiopilot-native-report.py
+COPY --from=native-build /wheelhouse /tmp/studiopilot-wheelhouse
+RUN mkdir -p /usr/share/doc/studiopilot-wheels \
+    && cp /tmp/studiopilot-wheelhouse/installed.lock /tmp/studiopilot-wheelhouse/build-wheels.json /tmp/studiopilot-wheelhouse/build-toolchain.json /usr/share/doc/studiopilot-wheels/ \
+    && pip install --no-cache-dir --no-index --find-links=/tmp/studiopilot-wheelhouse \
+        --require-hashes -r /tmp/studiopilot-wheelhouse/installed.lock \
     && pip check \
+    && rm -rf /tmp/studiopilot-wheelhouse \
     && python -m pip uninstall --yes pip \
     && rm -rf /usr/local/lib/python3.15/ensurepip
 COPY backend/ ./
