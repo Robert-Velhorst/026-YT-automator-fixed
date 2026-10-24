@@ -5,10 +5,21 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3 AS sqlite-build
+WORKDIR /native-build
+RUN apk upgrade --no-cache && apk add --no-cache build-base openssl
+COPY sqlite-runtime.json ./
+COPY scripts/build_sqlite_runtime.py ./scripts/build_sqlite_runtime.py
+RUN python -I scripts/build_sqlite_runtime.py
+
 FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN apk upgrade --no-cache
+COPY --from=sqlite-build /native-build/output /tmp/studiopilot-sqlite
+RUN apk --keys-dir /tmp/studiopilot-sqlite/keys --no-network add /tmp/studiopilot-sqlite/studiopilot-sqlite.apk \
+    && rm -rf /tmp/studiopilot-sqlite
+COPY sqlite-runtime.json ./sqlite-runtime.json
 COPY backend/requirements-py315.lock ./requirements.lock
 RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock \
     && pip check \

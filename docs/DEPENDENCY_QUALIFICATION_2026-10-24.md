@@ -42,6 +42,31 @@ check without advisory exclusions.
 
 ## Installed image and outstanding evidence
 
+### SQLite 3.54.1 source build
+
+The qualified Alpine image at 72dbed3 reported SQLite 3.53.4. This follow-up
+builds public stable SQLite 3.54.1 from the official SHA3-256-pinned source
+archive. Downloads reject redirects and oversized archives; compilation occurs
+only in a separate Alpine builder stage. The source profile is recorded in
+`sqlite-runtime.json`.
+
+The library retains Alpine's column metadata, secure deletion, unlock notify,
+R-tree/geopoly, FTS3/4/5, session/preupdate hook, URI, DBSTAT, soundex and 250000
+variable-count settings. A fresh CPython child must load the built engine at the
+expected version before packaging. Its APK records the real upstream version,
+source origin, binary hash and build provenance. A build-only signing key is
+removed before its builder RUN completes; installation uses the public key
+offline without changing global trusted keys.
+
+Only the registered library and provenance enter the application image. CI checks
+the actual CPython SQLite version, library hash and APK inventory and reuses the
+same complete backend suite. No compiler, source archive, signing key, alternate
+application code or dependency installation workaround enters the runtime.
+Source preparation is not current-head installed-image qualification.
+
+Sources: [SQLite downloads and checksums](https://www.sqlite.org/download.html),
+[Alpine distribution features](https://raw.githubusercontent.com/alpinelinux/aports/3.24-stable/main/sqlite/APKBUILD).
+
 The initial slim-image candidate at 410662d built and installed successfully,
 but its raw scan returned 171 findings, including 48 high. The Debian package
 inventory and bundled package-manager libraries were not qualified by the clean

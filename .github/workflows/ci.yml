@@ -129,12 +129,24 @@ jobs:
           docker image inspect --format '{{.Id}}' studiopilot:qualification > output/image-id.txt
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges studiopilot:qualification python -c '
           import importlib.metadata as m
-          import json, os, platform, sqlite3, ssl
+          import hashlib, json, os, platform, sqlite3, ssl, subprocess
+          from pathlib import Path
           import psycopg.pq
           from cryptography.hazmat.bindings.openssl.binding import Binding
           binding = Binding()
+          profile = json.loads(Path("/app/sqlite-runtime.json").read_text())
+          provenance = json.loads(Path("/usr/share/doc/sqlite-libs/studiopilot-build.json").read_text())
+          sqlite_hash = hashlib.sha256(Path("/usr/lib/libsqlite3.so.0").read_bytes()).hexdigest()
+          assert sqlite3.sqlite_version == profile["version"] == provenance["version"]
+          assert sqlite_hash == provenance["binary_sha256"]
+          assert profile["source_sha3_256"] == provenance["source_sha3_256"]
+          sqlite_packages = subprocess.check_output(["apk", "--no-network", "list", "--installed", "sqlite-libs"], text=True).strip().splitlines()
+          assert len(sqlite_packages) == 1
+          sqlite_package = sqlite_packages[0].split()[0]
+          assert sqlite_package == "sqlite-libs-" + profile["version"] + "-r0"
           print(json.dumps({"python": platform.python_version(), "uid": os.getuid(),
               "sqlite": sqlite3.sqlite_version, "python_ssl": ssl.OPENSSL_VERSION,
+              "sqlite_package": sqlite_package, "sqlite_build": provenance, "sqlite_binary_sha256": sqlite_hash,
               "cryptography_ssl": binding.ffi.string(binding.lib.OpenSSL_version(0)).decode(),
               "libpq": psycopg.pq.version(), "packages": {d.metadata["Name"]: d.version for d in m.distributions()},
               "operator_database_opened": False, "application_started": False, "deployment_acceptance": False}))
