@@ -17,7 +17,7 @@ FROM rust:1.99.1-alpine3.24@sha256:b1d5dd5a22a09404d3e798c0cf051b689077360374eb5
 FROM sqlite-build AS native-build
 # Keep distribution development-header dependencies consistent in this SDK.
 # The independently built SQLite 3.54.1 APK is installed only in the final image.
-RUN apk add --no-cache linux-headers perl pkgconf bison flex krb5-dev openldap-dev libffi-dev libstdc++
+RUN apk add --no-cache linux-headers bluez-dev perl pkgconf bison flex krb5-dev openldap-dev libffi-dev libstdc++
 COPY --from=rust-sdk /usr/local/rustup /usr/local/rustup
 COPY --from=rust-sdk /usr/local/cargo /usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo \
