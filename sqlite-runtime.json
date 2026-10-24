@@ -1,0 +1,7 @@
+{
+  "version": "3.54.1",
+  "source_url": "https://www.sqlite.org/2026/sqlite-autoconf-3540100.tar.gz",
+  "source_sha3_256": "b6ced585c750916b1052667239a12c25a7ff34e7f06e1e6e01ecb0427657d9c4",
+  "upstream_checksums": "https://www.sqlite.org/download.html",
+  "distribution_features": "https://raw.githubusercontent.com/alpinelinux/aports/3.24-stable/main/sqlite/APKBUILD"
+}

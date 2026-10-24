@@ -1,18 +1,36 @@
-FROM node:26.12.0-bookworm-slim@sha256:298992629d69bbd5b2b03ad57094d8e4fcb3a8eeb7c4e25d29de656519568913 AS frontend-build
+FROM node:26.12.1-bookworm-slim@sha256:28147155d47dc31abe0a46e0d12b59b2fb3d0a2dcc5dc65fce76a074180b16fe AS frontend-build
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3 AS sqlite-build
+WORKDIR /native-build
+RUN apk upgrade --no-cache && apk add --no-cache build-base openssl
+COPY sqlite-runtime.json ./
+COPY scripts/build_sqlite_runtime.py ./scripts/build_sqlite_runtime.py
+RUN python -I scripts/build_sqlite_runtime.py
+
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apk upgrade --no-cache
+COPY --from=sqlite-build /native-build/output /tmp/studiopilot-sqlite
+RUN apk --keys-dir /tmp/studiopilot-sqlite/keys --no-network add /tmp/studiopilot-sqlite/studiopilot-sqlite.apk \
+    && rm -rf /tmp/studiopilot-sqlite
+COPY sqlite-runtime.json ./sqlite-runtime.json
+COPY backend/requirements-py315.lock ./requirements.lock
+RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock \
+    && pip check \
+    && python -m pip uninstall --yes pip \
+    && rm -rf /usr/local/lib/python3.15/ensurepip
 COPY backend/ ./
 COPY --from=frontend-build /frontend/dist /frontend/dist
-RUN mkdir -p /app/instance /app/uploads /app/generated && useradd --system --uid 10001 studio && chown -R studio:studio /app /frontend
+RUN mkdir -p /app/instance /app/uploads /app/generated \
+    && addgroup -S -g 10001 studio \
+    && adduser -S -D -H -u 10001 -G studio studio \
+    && chown -R studio:studio /app /frontend
 USER studio
 EXPOSE 5000
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "2", "--timeout", "120", "app:app"]

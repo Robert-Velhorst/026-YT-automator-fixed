@@ -10,7 +10,7 @@ Run the setup script from the repository root:
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup.ps1
 ```
 
-Setup accepts Python 3.13 through 3.15 and Node.js 24.22 LTS or 26.12 Current. It prepares the backend environment, builds the interface, and applies database migrations.
+Setup accepts stable Python 3.13.17+, 3.14.9+ or 3.15.1+ within those minor lines, and Node.js 24.22.1+ or 26.12.1+ within those major lines. Python 3.15.1 and Node.js 26.12.1 are recommended. It selects the matching hash-locked backend graph, builds the interface, and applies database migrations when the operator runs setup. No future major is accepted automatically. See [dependency qualification](DEPENDENCY_QUALIFICATION_2026-10-24.md).
 
 ## Start, inspect, and stop
 
