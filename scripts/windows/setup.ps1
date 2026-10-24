@@ -40,21 +40,33 @@ $SupportedLauncher = @("-3.15", "-3.14", "-3.13") | Where-Object {
 if (-not (Get-Command $PythonForSetup -ErrorAction SilentlyContinue)) {
     throw "Python 3.13-3.15 is required. Install Python from python.org, including the py launcher."
 }
-$VersionArgs = @($PythonForSetupArgs + @("-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"))
+$VersionArgs = @($PythonForSetupArgs + @("-c", "import sys; assert sys.version_info.releaselevel == 'final', 'A stable Python release is required'; print('.'.join(map(str, sys.version_info[:3])))"))
 $Version = & $PythonForSetup @VersionArgs
+if ($LASTEXITCODE -ne 0) { throw "A stable Python 3.13-3.15 release is required; Python 3.15.1 is recommended." }
 $Parts = $Version.Split(".")
 if ([int]$Parts[0] -ne 3 -or [int]$Parts[1] -lt 13 -or [int]$Parts[1] -gt 15) {
     throw "Python 3.13-3.15 is required; py -3 selected $Version."
 }
 
+$PythonMinimums = @{
+    "13" = [Version]"3.13.17"
+    "14" = [Version]"3.14.9"
+    "15" = [Version]"3.15.1"
+}
+if ([Version]$Version -lt $PythonMinimums[$Parts[1]]) {
+    throw "Python $Version is below the patched baseline $($PythonMinimums[$Parts[1]]); install the current stable patch release."
+}
+$DependencyLock = Join-Path $Root "backend\requirements-py$($Parts[0])$($Parts[1]).lock"
+if (-not (Test-Path -LiteralPath $DependencyLock -PathType Leaf)) { throw "The supported Python dependency lock is missing." }
+
 Write-Host "Checking Node.js..."
 $Node = Get-Command $NodeExecutable -ErrorAction SilentlyContinue
 $Npm = if ($NpmCli) { Test-Path $NpmCli } else { [bool](Get-Command npm.cmd -ErrorAction SilentlyContinue) }
-if (-not $Node -or -not $Npm) { throw "Node.js 24.22.0 LTS or 26.12.0 Current with npm is required." }
+if (-not $Node -or -not $Npm) { throw "Node.js 24.22.1 LTS or 26.12.1 Current with npm is required." }
 $NodeVersion = [Version]((& $NodeExecutable --version).TrimStart("v"))
-$NodeSupported = ($NodeVersion.Major -eq 24 -and $NodeVersion -ge [Version]"24.22.0") -or `
-    ($NodeVersion.Major -eq 26 -and $NodeVersion -ge [Version]"26.12.0") -or $NodeVersion.Major -gt 26
-if (-not $NodeSupported) { throw "Node.js 24.22.0 LTS or 26.12.0 Current is required. Detected Node.js $NodeVersion." }
+$NodeSupported = ($NodeVersion.Major -eq 24 -and $NodeVersion -ge [Version]"24.22.1") -or `
+    ($NodeVersion.Major -eq 26 -and $NodeVersion -ge [Version]"26.12.1")
+if (-not $NodeSupported) { throw "Node.js 24.22.1 LTS or 26.12.1 Current is required. Detected Node.js $NodeVersion." }
 
 if (-not (Test-Path $VenvPython)) {
     Write-Host "Creating the private Python environment..."
@@ -62,8 +74,10 @@ if (-not (Test-Path $VenvPython)) {
     if ($LASTEXITCODE -ne 0) { throw "Could not create the Python environment." }
 }
 Write-Host "Installing backend dependencies..."
-& $VenvPython -m pip install --disable-pip-version-check -r (Join-Path $Root "backend\requirements-dev.txt")
+& $VenvPython -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r $DependencyLock
 if ($LASTEXITCODE -ne 0) { throw "Backend dependency installation failed." }
+& $VenvPython -m pip check
+if ($LASTEXITCODE -ne 0) { throw "Backend dependency consistency check failed." }
 
 if (-not (Test-Path $BackendEnv)) {
     if (-not $OperatorPassword) {

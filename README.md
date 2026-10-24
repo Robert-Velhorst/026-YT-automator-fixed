@@ -14,7 +14,7 @@ The production frontend is built once and served by Flask. Browser calls use sam
 
 ## Windows 11
 
-Prerequisites: Python 3.13-3.15, Node.js 24.22.0 LTS or 26.12.0 Current, and npm. Production uses Python 3.15 and Node.js 26.12.0. FFmpeg is required only for long-video transcription.
+Prerequisites: stable Python 3.13.17+, 3.14.9+ or 3.15.1+, Node.js 24.22.1 LTS or 26.12.1 Current, and npm. Production targets Python 3.15.1 and Node.js 26.12.1. Future Python/Node major lines require separate qualification. FFmpeg is required only for long-video transcription. See [dependency qualification](docs/DEPENDENCY_QUALIFICATION_2026-10-24.md) for lock files and remaining runtime/provider evidence.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\setup.ps1
@@ -61,7 +61,7 @@ See [HAI connector](docs/HAI_CONNECTOR.md).
 
 ```powershell
 py -3.15 -m venv .venv
-.\.venv\Scripts\python -m pip install -r backend\requirements-dev.txt
+.\.venv\Scripts\python -m pip install --only-binary=:all: --require-hashes -r backend\requirements-py315.lock
 cd backend
 ..\.venv\Scripts\python -m flask --app app db upgrade
 ..\.venv\Scripts\python -m pytest -q
