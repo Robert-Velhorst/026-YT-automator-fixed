@@ -42,14 +42,26 @@ check without advisory exclusions.
 
 ## Installed image and outstanding evidence
 
-The backend base is pinned to official Python 3.15.1 slim manifest digest
-`sha256:08275f764e022331c6d3e3ca55d8cce01fa4684b02111adf0445d71806fe7941`.
-OS packages are refreshed through that distribution's repositories. This does
-not imply all upstream native major versions are current.
+The initial slim-image candidate at 410662d built and installed successfully,
+but its raw scan returned 171 findings, including 48 high. The Debian package
+inventory and bundled package-manager libraries were not qualified by the clean
+application lock audit. Actual metadata also reported SQLite 3.46.1, Python SSL
+3.5.7 and cryptography SSL 4.0.3. Those results are retained as failed evidence.
+
+The follow-up backend base pins official Python 3.15.1 on Alpine 3.24, manifest
+digest `sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3`.
+OS packages are refreshed through that stable distribution. Pip and its bundled
+ensurepip reinstaller are removed after the complete application graph is
+installed and checked; runtime upgrades use rebuilt images. No scanner metadata
+is edited separately and no advisory is excluded. This does not imply every
+upstream native major version is current.
 
 CI builds the actual production image, records Python/SSL/SQLite/libpq and
 installed package versions without starting the application or a database,
-and scans all installed OS/Python packages at every severity. Reports remain
+and reuses the full existing backend suite against the exact image. The fixture
+has no network or host mounts, uses a read-only root and bounded temporary
+filesystems, and runs as UID 10001 with capabilities dropped. CI also scans all
+installed OS/Python packages at every severity. Reports remain
 bound to the image ID; a metadata-only lock audit cannot qualify that image.
 Current-head hosted installation, route, migration, browser/build and image
 results are required before merging. CI SQLite migrations use disposable data.

@@ -139,6 +139,15 @@ jobs:
               "libpq": psycopg.pq.version(), "packages": {d.metadata["Name"]: d.version for d in m.distributions()},
               "operator_database_opened": False, "application_started": False, "deployment_acceptance": False}))
           ' > output/installed-runtime.json
+      - name: Run the existing backend suite against the exact installed image
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=256m,mode=1777 \
+            --tmpfs /app/instance:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700 \
+            --tmpfs /app/uploads:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700 \
+            --tmpfs /app/generated:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700 \
+            --memory 768m --cpus 2 studiopilot:qualification \
+            python -m pytest tests -q -p no:cacheprovider --basetemp=/tmp/studiopilot-ci
       - name: Scan all installed OS and Python packages without advisory exclusions
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/output:/output" aquasec/trivy:0.76.1 image --ignorefile /dev/null --scanners vuln --list-all-pkgs --format json --output /output/image-security.json --exit-code 1 studiopilot:qualification

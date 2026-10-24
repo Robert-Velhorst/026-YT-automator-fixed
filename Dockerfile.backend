@@ -5,15 +5,21 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.15.1-slim@sha256:08275f764e022331c6d3e3ca55d8cce01fa4684b02111adf0445d71806fe7941
+FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN apk upgrade --no-cache
 COPY backend/requirements-py315.lock ./requirements.lock
-RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock && pip check
+RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock \
+    && pip check \
+    && python -m pip uninstall --yes pip \
+    && rm -rf /usr/local/lib/python3.15/ensurepip
 COPY backend/ ./
 COPY --from=frontend-build /frontend/dist /frontend/dist
-RUN mkdir -p /app/instance /app/uploads /app/generated && useradd --system --uid 10001 studio && chown -R studio:studio /app /frontend
+RUN mkdir -p /app/instance /app/uploads /app/generated \
+    && addgroup -S -g 10001 studio \
+    && adduser -S -D -H -u 10001 -G studio studio \
+    && chown -R studio:studio /app /frontend
 USER studio
 EXPOSE 5000
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "2", "--timeout", "120", "app:app"]
