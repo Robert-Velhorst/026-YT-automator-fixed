@@ -14,9 +14,9 @@
     "checksum_source": "https://ftp.postgresql.org/pub/source/v18.6/postgresql-18.6.tar.bz2.sha256"
   },
   "cpython": {
-    "version": "3.15.1",
-    "url": "https://www.python.org/ftp/python/3.15.1/Python-3.15.1.tar.xz",
-    "sha256": "673ae7232d84c894729882c8257d300ef2d26523911bfd3917ec8ce7f526f99b"
+    "version": "3.15.2",
+    "url": "https://www.python.org/ftp/python/3.15.2/Python-3.15.2.tar.xz",
+    "sha256": "8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de"
   },
   "cryptography": {
     "version": "50.0.2",

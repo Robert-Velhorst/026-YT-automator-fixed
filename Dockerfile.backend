@@ -5,7 +5,7 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3 AS sqlite-build
+FROM python:3.15.2-alpine3.24@sha256:1656b7eaf309cadf99069ea9de335c7f67a8355789cfc6f1835a05818996f081 AS sqlite-build
 WORKDIR /native-build
 RUN apk upgrade --no-cache && apk add --no-cache build-base openssl
 COPY sqlite-runtime.json ./
@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir --only-binary=:all: --require-hashes -r requireme
         --no-binary=cryptography,psycopg-c --wheel-dir /wheelhouse -r requirements-image.lock \
     && python -I scripts/lock_built_wheels.py
 
-FROM python:3.15.1-alpine3.24@sha256:54448f67d7c31c39e5cdd3ea2d6382395ce142806c284425f8e897d78a0465b3
+FROM python:3.15.2-alpine3.24@sha256:1656b7eaf309cadf99069ea9de335c7f67a8355789cfc6f1835a05818996f081
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     LD_LIBRARY_PATH=/opt/studiopilot-native/lib PSYCOPG_IMPL=c
 WORKDIR /app
